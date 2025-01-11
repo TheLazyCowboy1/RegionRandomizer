@@ -1,8 +1,6 @@
 ﻿using BepInEx;
-using Mono.Cecil;
 using RWCustom;
 using System.Collections.Generic;
-using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Security.Permissions;
@@ -22,6 +20,7 @@ namespace RegionRandomizer;
 
 [BepInDependency("rwmodding.coreorg.rk", BepInDependency.DependencyFlags.HardDependency)]
 [BepInDependency("LazyCowboy.KarmaExpansion", BepInDependency.DependencyFlags.SoftDependency)]
+[BepInDependency("henpemaz.rainmeadow", BepInDependency.DependencyFlags.SoftDependency)]
 
 [BepInPlugin("LazyCowboy.RegionRandomizer", "Region Randomizer", "1.2.1")]
 public partial class RegionRandomizer : BaseUnityPlugin
@@ -157,7 +156,10 @@ public partial class RegionRandomizer : BaseUnityPlugin
                 if (mod.id == "LazyCowboy.KarmaExpansion")
                 {
                     KarmaCap = 22;
-                    break;
+                }
+                if (mod.id == "henpemaz.rainmeadow")
+                {
+                    meadowEnabled = true;
                 }
             }
 
@@ -1457,6 +1459,16 @@ public partial class RegionRandomizer : BaseUnityPlugin
 
     private static void InitiateGame(string slugcat, bool expedition = false)
     {
+        if (IsOnline && !IsHost)
+        {
+            // host will tell us
+            Debug.Log($"CustomGateLocks: [ {string.Join(", ", CustomGateLocks.Select((key, value) => $"\"{key}\": \"{value}\""))} ]");
+            Debug.Log($"GateNames: [ {string.Join(", ", GateNames)} ]");
+            Debug.Log($"NewGates1: [ {string.Join(", ", NewGates1)} ]");
+            Debug.Log($"NewGates2: [ {string.Join(", ", NewGates2)} ]");
+            return;
+        }
+
         addKarmaNextDeath = 0;
 
         //apply randomizer files
@@ -1505,6 +1517,11 @@ public partial class RegionRandomizer : BaseUnityPlugin
         ReadLocksFiles(slugcat);
 
         //MergeLocksFile(locksFile);
+
+        if (IsOnline && IsHost)
+        {
+            AddOnlineData();
+        }
     }
     private static void MergeLocksFile(string locksFile) {
         //merge locks file

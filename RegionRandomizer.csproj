@@ -72,6 +72,9 @@
     <Reference Include="UnityEngine.InputLegacyModule">
       <HintPath>..\REFERENCES\UnityEngine.InputLegacyModule.dll</HintPath>
     </Reference>
+    <Reference Include="Rain Meadow">
+      <HintPath>..\REFERENCES\Rain Meadow.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
 </Project>
