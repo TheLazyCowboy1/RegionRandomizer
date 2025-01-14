@@ -36,6 +36,34 @@ public partial class RegionRandomizer : BaseUnityPlugin
      * at the end of the randomizer logic process, so the GateSwitch hook can find the right gate.
     */
 
+    #region RainMeadowCompat
+    public static bool meadowEnabled = false;
+    public static bool IsOnline()
+    {
+        try
+        {
+            if (!meadowEnabled) return false;
+            return RainMeadowCompat.IsOnline;
+        }
+        catch { return false; }
+    }
+    public static bool IsHost()
+    {
+        try
+        {
+            if (!meadowEnabled) return false;
+            return RainMeadowCompat.IsHost;
+        }
+        catch { return false; }
+    }
+    public static void AddOnlineData()
+    {
+        try { RainMeadowCompat.AddOnlineData(); }
+        catch { }
+    }
+    #endregion
+
+    #region mod_setup
     public static RegionRandomizerOptions Options;
 
     public static RegionRandomizer Instance;
@@ -74,7 +102,7 @@ public partial class RegionRandomizer : BaseUnityPlugin
             On.Expedition.ExpeditionGame.ExpeditionRandomStarts -= ExpeditionGame_ExpeditionRandomStarts;
             On.PlayerProgression.GetOrInitiateSaveState -= PlayerProgression_GetOrInitiateSaveState;
 
-            On.ShortcutGraphics.GenerateSprites -= ShortcutGraphics_GenerateSprites;
+            //On.ShortcutGraphics.GenerateSprites -= ShortcutGraphics_GenerateSprites;
 
             On.HUD.Map.GateMarker.ctor -= GateMarker_ctor;
             On.GateKarmaGlyph.DrawSprites -= GateKarmaGlyph_DrawSprites;
@@ -119,7 +147,7 @@ public partial class RegionRandomizer : BaseUnityPlugin
             On.Expedition.ExpeditionGame.ExpeditionRandomStarts += ExpeditionGame_ExpeditionRandomStarts;
             On.PlayerProgression.GetOrInitiateSaveState += PlayerProgression_GetOrInitiateSaveState;
 
-            On.ShortcutGraphics.GenerateSprites += ShortcutGraphics_GenerateSprites;
+            //On.ShortcutGraphics.GenerateSprites += ShortcutGraphics_GenerateSprites;
 
             On.HUD.Map.GateMarker.ctor += GateMarker_ctor;
             On.GateKarmaGlyph.DrawSprites += GateKarmaGlyph_DrawSprites;
@@ -155,7 +183,7 @@ public partial class RegionRandomizer : BaseUnityPlugin
             {
                 if (mod.id == "LazyCowboy.KarmaExpansion")
                 {
-                    KarmaCap = 22;
+                    KarmaCap = 34;//22;
                 }
                 if (mod.id == "henpemaz.rainmeadow")
                 {
@@ -173,21 +201,12 @@ public partial class RegionRandomizer : BaseUnityPlugin
             throw;
         }
     }
-    
+    #endregion
 
     //alters gate locks without manually merging changes into locks.txt
     public static void RegionGate_customKarmaGateRequirements(On.RegionGate.orig_customKarmaGateRequirements orig, RegionGate self)
     {
         orig(self);
-        /*
-        self.room.game.rainWorld.HandleLog("RegionRandomizer: CustomKarmaRequirements", "stuff", LogType.Log);
-        string karma0 = self.karmaRequirements[0].value, karma1 = self.karmaRequirements[1].value;
-        orig(self);
-        if (self.karmaRequirements[0].value != karma0)
-        { self.karmaRequirements[0].value = karma0; self.room.game.rainWorld.HandleLog("RegionRandomizer: Reset karma[0] to " + karma0, "stuff", LogType.Log); }
-        if (self.karmaRequirements[1].value != karma1)
-        { self.karmaRequirements[1].value = karma1; self.room.game.rainWorld.HandleLog("RegionRandomizer: Reset karma[1] to " + karma1, "stuff", LogType.Log); }
-        */
 
         //alter gate locks
         if (Options.alterGateLocks.Value && CustomGateLocks.TryGetValue(self.room.abstractRoom.name, out string lockString) && lockString.Contains(':'))
@@ -240,15 +259,6 @@ public partial class RegionRandomizer : BaseUnityPlugin
         if (self.karmaRequirements[0] != MoreSlugcats.MoreSlugcatsEnums.GateRequirement.OELock && self.karmaRequirements[1] != MoreSlugcats.MoreSlugcatsEnums.GateRequirement.OELock)
             return true;
         return orig(self);
-    }
-
-    public static void ShortcutGraphics_GenerateSprites(On.ShortcutGraphics.orig_GenerateSprites orig, ShortcutGraphics self)
-    {
-        try { orig(self); }
-        catch (Exception ex)
-        {
-            self.room.game.rainWorld.HandleLog("RegionRandomizer: " + ex.Message, ex.StackTrace, LogType.Error);
-        }
     }
 
     #region RegionKitFixes 
@@ -1077,190 +1087,6 @@ public partial class RegionRandomizer : BaseUnityPlugin
         OriginalGateName = "";
     }
 
-    /*
-    public static void OverWorld_WorldLoaded(On.OverWorld.orig_WorldLoaded orig, OverWorld self)
-    {
-        if (RealNewGateName == "")
-        {
-            OriginalGateName = "";
-            orig(self);
-            return;
-        }
-
-        GateBlockUnload = "";
-
-        self.game.rainWorld.HandleLog("RegionRandomizer: World loaded in gate: " + RealNewGateName, "stuff", LogType.Log);
-
-        //AbstractRoom roomToReplace = self.worldLoader.ReturnWorld().GetAbstractRoom(RealNewGateName);
-
-        //self.game.rainWorld.HandleLog("RegionRandomizer: World Loader code success!", "stuff", LogType.Log);
-
-        try
-        {
-            //foreach (string thing in Futile.atlasManager._allElementsByName.Keys)
-            //{
-            //    self.game.rainWorld.HandleLog("RegionRandomizer: Atlas list: " + thing, "stuff", LogType.Log);
-            //} gateSymbolComsmark
-            
-            orig(self);
-        } catch (Exception ex)
-        {
-            self.game.rainWorld.HandleLog("RegionRandomizer: World Loader Error (Gates: " + OriginalGateName + ", " + RealNewGateName + "): " + ex.Message, ex.StackTrace, LogType.Error);
-            //return;
-        }
-
-
-        //teleport player to new room
-        AbstractRoom abRoom = self.activeWorld.GetAbstractRoom(RealNewGateName);
-
-        //gate asset stuff patch: try renaming gate to original name, then renaming it again upon abstraction
-        //abRoom.name = OriginalGateName;
-
-        Room realRoom = abRoom.realizedRoom;
-        ShortcutData shortcut = new ShortcutData();
-        bool found = false;
-        try
-        {
-            //search for node with the needed connection
-            int count = 0;
-            int highestDestNode = 0;
-            foreach (ShortcutData s in realRoom.shortcuts)
-            {
-                if (s.destNode < abRoom.connections.Length)
-                {
-                    highestDestNode = Math.Max(highestDestNode, s.destNode);
-                    if (s.destNode >= 0)
-                    {
-                        if (abRoom.connections[s.destNode] > -1 && abRoom.connections[s.destNode] != abRoom.index && Array.IndexOf(self.activeWorld.shelters, abRoom.connections[s.destNode]) < 0)
-                        {
-                            self.game.rainWorld.HandleLog("RegionRandomizer: Exit node idx: " + count, "stuff", LogType.Log);
-                            shortcut = s;
-                            found = true;
-                            break;
-                        }
-                    }
-                }
-                count++;
-            }
-            if (!found)
-            {
-                self.game.rainWorld.HandleLog("RegionRandomizer: Attempting to correct no node found... highestDestNode: " + highestDestNode, "stuff", LogType.Log);
-                int connectionIdx = 0;
-                for (int i = 0; i < abRoom.connections.Length; i++)
-                {
-                    if (abRoom.connections[i] > -1 && abRoom.connections[i] != abRoom.index && Array.IndexOf(self.activeWorld.shelters, abRoom.connections[i]) < 0)
-                    {
-                        connectionIdx = i;
-                        break;
-                    }
-                }
-                self.game.rainWorld.HandleLog("RegionRandomizer: Connection idx: " + connectionIdx, "stuff", LogType.Log);
-
-                //patch the first connection being an inaccessable node
-                abRoom.connections[highestDestNode] = abRoom.connections[connectionIdx];
-                count = 0;
-                foreach (ShortcutData s in realRoom.shortcuts)
-                {
-                    if (s.destNode < abRoom.connections.Length && s.destNode >= 0)
-                    {
-                        if (abRoom.connections[s.destNode] > -1 && abRoom.connections[s.destNode] != abRoom.index && Array.IndexOf(self.activeWorld.shelters, abRoom.connections[s.destNode]) < 0)
-                        {
-                            self.game.rainWorld.HandleLog("RegionRandomizer: New exit node idx: " + count, "stuff", LogType.Log);
-                            shortcut = s;
-                            found = true;
-                            break;
-                        }
-                    }
-                    count++;
-                }
-                self.game.rainWorld.HandleLog("RegionRandomizer: Attempted connection patch!", "stuff", LogType.Log);
-            }
-        }
-        catch (Exception ex)
-        {
-            self.game.rainWorld.HandleLog("RegionRandomizer: Shortcut Error: " + ex.Message, ex.StackTrace, LogType.Error);
-        }
-
-        //old creature list
-        List<AbstractCreature> oldCreatures = new();//abRoom.creatures;
-        foreach (AbstractCreature c in abRoom.creatures)
-            oldCreatures.Add(c);
-
-        string origName = OriginalGateName;
-        string newName = RealNewGateName;
-
-        OriginalGateName = "";
-        RealNewGateName = "";
-
-        if (found)
-        {
-            try
-            {
-                //kill old gate room
-                RemovePlayersFromRoomLoop(self, oldCreatures, origName, newName, shortcut);
-            }
-            catch (Exception ex)
-            {
-                self.game.rainWorld.HandleLog("RegionRandomizer: Error: " + ex.Message, ex.StackTrace, LogType.Error);
-            }
-        }
-        else
-            self.game.rainWorld.HandleLog("RegionRandomizer: No exit node found", "stuff", LogType.Log);
-    }
-    */
-    //unused and would throw errors unless the oldGateConnections param is added
-    public static async void RemovePlayersFromRoomLoop(OverWorld self, List<AbstractCreature> oldCreatures, string origName, string newName, ShortcutData shortcut)
-    {
-        await Task.Delay(4000);
-        AbstractRoom ar = null;
-
-        //gate asset stuff patch: try renaming gate to original name, then renaming it again upon abstraction
-        try
-        {
-            ar = self.activeWorld.GetAbstractRoom(newName);
-            ar.name = origName;
-            self.game.rainWorld.HandleLog("RegionRandomizer: Renamed " + newName + " to " + origName, "stuff", LogType.Log);
-        } catch (Exception ex)
-        {
-            self.game.rainWorld.HandleLog("RegionRandomizer: Gate renaming error: Failed to rename " + newName + " to " + origName + ". " + ex.Message, ex.StackTrace, LogType.Error);
-            origName = newName;
-        }
-
-        await Task.Delay(1000);
-
-        while (true)
-        {
-            try
-            {
-                ar = self.activeWorld.GetAbstractRoom(origName);
-                if (ar.realizedRoom == null || ar.realizedRoom.regionGate.mode == RegionGate.Mode.MiddleOpen)
-                    break;
-                await Task.Delay(200);
-            }
-            catch (Exception ex)
-            {
-                self.game.rainWorld.HandleLog("RegionRandomizer: Gate Opening Error: " + ex.Message, ex.StackTrace, LogType.Error);
-                await Task.Delay(200);
-            }
-        }
-        
-            self.game.rainWorld.HandleLog("RegionRandomizer: Exit node found!", "stuff", LogType.Log);
-        foreach (AbstractCreature c in oldCreatures)
-        {
-            try
-            {
-                if (c.Room.name != ar.name)
-                    self.game.rainWorld.HandleLog("RegionRandomizer: Creature in room " + c.Room.name + ", not in " + ar.name, "no stack trace", LogType.Error);
-                else if (c.realizedCreature != null && ar.realizedRoom != null)
-                    self.game.shortcuts.SuckInCreature(c.realizedCreature, ar.realizedRoom, shortcut);
-                await Task.Delay(500);
-            }
-            catch (Exception ex) { self.game.rainWorld.HandleLog("RegionRandomizer: Creature Shortcut Error: " + ex.Message, ex.StackTrace, LogType.Error); }
-        }
-        self.game.rainWorld.HandleLog("RegionRandomizer: Moved all creatures to exit pipe", "stuff", LogType.Log);
-        GateAbstractizeLoop(self, oldCreatures, origName, newName, new int[0]);
-    }
-
     public static async void GateAbstractizeLoop(OverWorld self, List<AbstractCreature> oldCreatures, string origName, string newName, int[] oldGateConnections)
     {
         try
@@ -1459,7 +1285,9 @@ public partial class RegionRandomizer : BaseUnityPlugin
 
     private static void InitiateGame(string slugcat, bool expedition = false)
     {
-        if (IsOnline && !IsHost)
+        addKarmaNextDeath = 0;
+
+        if (IsOnline() && !IsHost())
         {
             // host will tell us
             Debug.Log($"CustomGateLocks: [ {string.Join(", ", CustomGateLocks.Select((key, value) => $"\"{key}\": \"{value}\""))} ]");
@@ -1468,8 +1296,6 @@ public partial class RegionRandomizer : BaseUnityPlugin
             Debug.Log($"NewGates2: [ {string.Join(", ", NewGates2)} ]");
             return;
         }
-
-        addKarmaNextDeath = 0;
 
         //apply randomizer files
         string randomizerFile = AssetManager.ResolveFilePath(string.Concat(new String[] {
@@ -1495,22 +1321,6 @@ public partial class RegionRandomizer : BaseUnityPlugin
             Options.UpdateForSlugcat(slugcat, expedition);
             Instance.RandomizeAllRegions();
             //apply randomizer files
-            /*
-            randomizerFile = AssetManager.ResolveFilePath(string.Concat(new String[] {
-                "RegionRandomizer",
-                Path.DirectorySeparatorChar.ToString(),
-                "RegionRandomizer-",
-                slugcat,
-                ".txt"
-            }));
-            locksFile = AssetManager.ResolveFilePath(string.Concat(new String[] {
-                "RegionRandomizer",
-                Path.DirectorySeparatorChar.ToString(),
-                "locks-",
-                slugcat,
-                ".txt"
-            }));
-            */
         }
 
         ReadRandomizerFiles(slugcat);
@@ -1518,74 +1328,11 @@ public partial class RegionRandomizer : BaseUnityPlugin
 
         //MergeLocksFile(locksFile);
 
-        if (IsOnline && IsHost)
+        if (IsOnline() && IsHost())
         {
             AddOnlineData();
         }
     }
-    private static void MergeLocksFile(string locksFile) {
-        //merge locks file
-        try
-        {
-            string[] newLocks = File.ReadAllLines(locksFile);
-
-            string oldLocksFile = AssetManager.ResolveFilePath(string.Concat(new String[] {
-                "World",
-                Path.DirectorySeparatorChar.ToString(),
-                "Gates",
-                Path.DirectorySeparatorChar.ToString(),
-                "locks.txt"
-            }));
-            string[] oldLocks = File.ReadAllLines(oldLocksFile);
-
-            string fileData = "";
-
-            List<string> locksAdded = new();
-
-            //add/replace all lines in oldlocks
-            for (int i = 0; i < oldLocks.Length; i++)
-            {
-                if (oldLocks[i].Length < 10)
-                    continue;
-                string g = Regex.Split(oldLocks[i], ":")[0];//.Substring(0, 10);
-                string n = "";
-                foreach (string l in newLocks)
-                {
-                    if (l.StartsWith(g))
-                    {
-                        n = l;
-                        locksAdded.Add(l);
-                        break;
-                    }
-                }
-
-                fileData += ((n == "") ? oldLocks[i] : n) + "\n";
-            }
-
-            //add all newlocks not present in oldlocks (e.g: some gates aren't in locks file if both sides are 1)
-            foreach (string l in newLocks)
-            {
-                if (l.StartsWith("GATE_") && !locksAdded.Contains(l))
-                    fileData += l + "\n";
-            }
-
-            File.WriteAllText(AssetManager.ResolveFilePath(string.Concat(new String[] {
-                //AssetManager.ResolveDirectory("mergedmods"),
-                "mergedmods",
-                Path.DirectorySeparatorChar.ToString(),
-                "World",
-                Path.DirectorySeparatorChar.ToString(),
-                "Gates",
-                Path.DirectorySeparatorChar.ToString(),
-                "locks.txt"
-            })), fileData);
-        }
-        catch (Exception ex)
-        {
-            Instance.Logger.LogError(ex);
-        }
-    }
-
 
     private void RainWorldGameOnShutDownProcess(On.RainWorldGame.orig_ShutDownProcess orig, RainWorldGame self)
     {
@@ -2565,6 +2312,7 @@ public partial class RegionRandomizer : BaseUnityPlugin
             string rightString = rightLock.ToString();
 
             //force locks
+            //preset locks right
             string[] locks = Options.presetLocks.Value.Split(',');
             idx = -1;
             for (int j = 0; j < locks.Length; j++)
@@ -2581,6 +2329,7 @@ public partial class RegionRandomizer : BaseUnityPlugin
                 rightString = (useMaxKarma) ? maxKarma.ToString() : locks[idx].Split(':')[1];
             }
 
+            //preset locks left
             idx = -1;
             for (int j = 0; j < locks.Length; j++)
             {
@@ -3221,11 +2970,11 @@ public partial class RegionRandomizer : BaseUnityPlugin
 
                 //use full gate names for writing the gate locks (e.g: GATE_HH_DS_Monk)
                 List<string> altOldGates = new();
-                //foreach (string g in gateData)
-                    //altOldGates.Add(g.Split(':')[0].Trim());
+                foreach (string g in gateData)
+                    altOldGates.Add(g.Split(':')[0].Trim());
 
                 //WriteGateLocks(regions, gateNames, newGates, connections, mapSwapped);
-                //WriteGateLocks(regions, altOldGates, newGates, connections, mapSwapped);
+                WriteGateLocks(regions, altOldGates, newGates, connections, mapSwapped);
                 Logger.LogDebug("RegionRandomizer: 9");
 
                 GateNames = gateNames.ToArray();
@@ -3257,6 +3006,13 @@ public partial class RegionRandomizer : BaseUnityPlugin
                 newGates.Clear();
                 connections.Clear();
                 altOldGates.Clear();
+
+
+                //sync randomizer info online
+                if (IsOnline() && IsHost())
+                {
+                    AddOnlineData();
+                }
 
             } catch (Exception ex)
             {

@@ -1,25 +1,31 @@
 using RainMeadow;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 
 namespace RegionRandomizer;
 
-public partial class RegionRandomizer
+/**
+ * Original file by Choc
+ * Significantly modified to support soft-compatibility
+ */
+internal partial class RainMeadowCompat
 {
-	public static bool meadowEnabled = false;
-	public static bool IsOnline => meadowEnabled && OnlineManager.lobby != null;
-	public static bool IsHost => OnlineManager.lobby.isOwner;
+    //public static bool meadowEnabled = false;
+    public static bool IsOnline => OnlineManager.lobby != null;
+    public static bool IsHost => OnlineManager.lobby.isOwner;
 
-	public static RandomizerData onlineData = new();
+    //public static RandomizerData onlineData = new();
+    public static object onlineData = null;
 
-	public static void AddOnlineData()
-	{
-		if (!IsOnline) return;
-		OnlineManager.lobby.AddData(onlineData);
-	}
+    public static void AddOnlineData()
+    {
+        if (!IsOnline) return;
+        onlineData ??= new RandomizerData();
+        OnlineManager.lobby.AddData(onlineData as RandomizerData);
+        RegionRandomizer.LogSomething("Added online data");
+    }
 
-	public class RandomizerData : OnlineResource.ResourceData
+    public class RandomizerData : OnlineResource.ResourceData
 	{
 		public RandomizerData() { }
 
