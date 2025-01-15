@@ -22,7 +22,7 @@ namespace RegionRandomizer;
 [BepInDependency("LazyCowboy.KarmaExpansion", BepInDependency.DependencyFlags.SoftDependency)]
 [BepInDependency("henpemaz.rainmeadow", BepInDependency.DependencyFlags.SoftDependency)]
 
-[BepInPlugin("LazyCowboy.RegionRandomizer", "Region Randomizer", "1.2.1")]
+[BepInPlugin("LazyCowboy.RegionRandomizer", "Region Randomizer", "1.2.2")]
 public partial class RegionRandomizer : BaseUnityPlugin
 {
 
@@ -120,7 +120,7 @@ public partial class RegionRandomizer : BaseUnityPlugin
 
     //private static RainWorldGame game;
 
-    private static Dictionary<string, string> CustomGateLocks = new(); //two locks separated by a colon. e.g 5:8 or 12:c
+    public static Dictionary<string, string> CustomGateLocks = new(); //two locks separated by a colon. e.g 5:8 or 12:c
 
     public static int KarmaCap = 10;
 
@@ -502,11 +502,11 @@ public partial class RegionRandomizer : BaseUnityPlugin
 
     #endregion
 
-    private static string[] GateNames = {
+    public static string[] GateNames = {
     };
-    private static string[] NewGates1 = {
+    public static string[] NewGates1 = {
     };
-    private static string[] NewGates2 =
+    public static string[] NewGates2 =
     {
     };
 
