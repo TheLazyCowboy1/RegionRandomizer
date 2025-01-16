@@ -1287,8 +1287,10 @@ public partial class RegionRandomizer : BaseUnityPlugin
     {
         addKarmaNextDeath = 0;
 
+        LogSomething("InitGame");
         if (IsOnline() && !IsHost())
         {
+            LogSomething("Skipping randomization");
             // host will tell us
             Debug.Log($"CustomGateLocks: [ {string.Join(", ", CustomGateLocks.Select((key, value) => $"\"{key}\": \"{value}\""))} ]");
             Debug.Log($"GateNames: [ {string.Join(", ", GateNames)} ]");
@@ -1330,6 +1332,7 @@ public partial class RegionRandomizer : BaseUnityPlugin
 
         if (IsOnline() && IsHost())
         {
+            LogSomething("Adding online data");
             AddOnlineData();
         }
     }
@@ -3011,6 +3014,7 @@ public partial class RegionRandomizer : BaseUnityPlugin
                 //sync randomizer info online
                 if (IsOnline() && IsHost())
                 {
+                    LogSomething("Adding online data from randomizer");
                     AddOnlineData();
                 }
 

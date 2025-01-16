@@ -20,8 +20,9 @@ internal partial class RainMeadowCompat
     public static void AddOnlineData()
     {
         if (!IsOnline) return;
-        onlineData ??= new RandomizerData();
-        OnlineManager.lobby.AddData(onlineData as RandomizerData);
+		onlineData ??= new RandomizerData();
+		OnlineManager.lobby.AddData(onlineData as RandomizerData);
+		//OnlineManager.lobby.AddData(new RandomizerData());
         RegionRandomizer.LogSomething("Added online data");
     }
 
@@ -59,6 +60,7 @@ internal partial class RainMeadowCompat
 				GateNames = RegionRandomizer.GateNames;
 				NewGates1 = RegionRandomizer.NewGates1;
 				NewGates2 = RegionRandomizer.NewGates2;
+				RegionRandomizer.LogSomething("Added state. Lengths: " + CustomGateLocksKeys.Length + ", " + NewGates1.Length);
 			}
 
 			public override void ReadTo(OnlineResource.ResourceData data, OnlineResource resource)
@@ -67,7 +69,8 @@ internal partial class RainMeadowCompat
 				RegionRandomizer.GateNames = GateNames;
 				RegionRandomizer.NewGates1 = NewGates1;
 				RegionRandomizer.NewGates2 = NewGates2;
-			}
+                RegionRandomizer.LogSomething("Read state. Lengths: " + CustomGateLocksKeys.Length + ", " + NewGates1.Length);
+            }
 		}
 	}
 }
