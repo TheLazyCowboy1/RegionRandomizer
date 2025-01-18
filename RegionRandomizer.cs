@@ -10,6 +10,8 @@ using System.Threading.Tasks;
 using System;
 using UnityEngine;
 using static RegionRandomizer.LogicalRando;
+using MonoMod.Cil;
+using Mono.Cecil.Cil;
 
 #pragma warning disable CS0618
 
@@ -20,11 +22,14 @@ namespace RegionRandomizer;
 
 [BepInDependency("rwmodding.coreorg.rk", BepInDependency.DependencyFlags.HardDependency)]
 [BepInDependency("LazyCowboy.KarmaExpansion", BepInDependency.DependencyFlags.SoftDependency)]
-[BepInDependency("henpemaz.rainmeadow", BepInDependency.DependencyFlags.SoftDependency)]
+[BepInDependency("henpemaz_rainmeadow", BepInDependency.DependencyFlags.SoftDependency)]
 
-[BepInPlugin("LazyCowboy.RegionRandomizer", "Region Randomizer", "1.2.2")]
+[BepInPlugin(MOD_ID, MOD_NAME, MOD_VERSION)]
 public partial class RegionRandomizer : BaseUnityPlugin
 {
+    public const string MOD_ID = "LazyCowboy.RegionRandomizer";
+    public const string MOD_NAME = "Region Randomizer";
+    public const string MOD_VERSION = "1.2.4";
 
     /*
      * TODO Notes:
@@ -45,7 +50,7 @@ public partial class RegionRandomizer : BaseUnityPlugin
             if (!meadowEnabled) return false;
             return RainMeadowCompat.IsOnline;
         }
-        catch { return false; }
+        catch (Exception ex) { LogSomething(ex); return false; }
     }
     public static bool IsHost()
     {
@@ -54,12 +59,12 @@ public partial class RegionRandomizer : BaseUnityPlugin
             if (!meadowEnabled) return false;
             return RainMeadowCompat.IsHost;
         }
-        catch { return false; }
+        catch (Exception ex) { LogSomething(ex); return false; }
     }
     public static void AddOnlineData()
     {
         try { RainMeadowCompat.AddOnlineData(); }
-        catch { }
+        catch (Exception ex) { LogSomething(ex); }
     }
     #endregion
 
@@ -84,6 +89,9 @@ public partial class RegionRandomizer : BaseUnityPlugin
 
     private void OnEnable()
     {
+        Logger.LogDebug("Mod enabled");
+        Logger.LogDebug("CustomGateLocksLength: " + CustomGateLocks.Count + ", onlineDataAdded: " + RainMeadowCompat.onlineDataAdded);
+
         On.RainWorld.OnModsInit += RainWorldOnOnModsInit;
         //RegionLoader.Enable();
     }
@@ -94,6 +102,7 @@ public partial class RegionRandomizer : BaseUnityPlugin
         if (IsInit)
         {
             On.OverWorld.GateRequestsSwitchInitiation -= OverWorld_GateRequestsSwitchInitiation;
+            On.WorldLoader.ctor_RainWorldGame_Name_bool_string_Region_SetupValues -= WorldLoader_ctor;
             On.OverWorld.WorldLoaded -= OverWorld_WorldLoaded;
 
             On.SaveState.SessionEnded -= SaveState_SessionEnded;
@@ -136,6 +145,9 @@ public partial class RegionRandomizer : BaseUnityPlugin
             //Your hooks go here
             //RegionLoader.Enable();
             On.OverWorld.GateRequestsSwitchInitiation += OverWorld_GateRequestsSwitchInitiation;
+            On.WorldLoader.ctor_RainWorldGame_Name_bool_string_Region_SetupValues += WorldLoader_ctor;
+            //IL.OverWorld.GateRequestsSwitchInitiation += IL_OverWorld_GateRequestsSwitchInitiation;
+
             //On.AbstractRoom.Abstractize += AbstractRoom_Abstractize;
             On.OverWorld.WorldLoaded += OverWorld_WorldLoaded;
 
@@ -184,22 +196,69 @@ public partial class RegionRandomizer : BaseUnityPlugin
                 if (mod.id == "LazyCowboy.KarmaExpansion")
                 {
                     KarmaCap = 34;//22;
+                    LogSomething("Found LazyCowboy.KarmaExpansion");
                 }
-                if (mod.id == "henpemaz.rainmeadow")
+                if (mod.id == "henpemaz_rainmeadow")
                 {
                     meadowEnabled = true;
+                    LogSomething("Found henpemaz_rainmeadow");
                 }
             }
 
+            //Rain Meadow compat hook:
+            if (meadowEnabled)
+                RainMeadowCompat.InitCompat();
+
             //double register extra karma levels...?
             //for (int i = 11; i <= KarmaCap; i++)
-                //new RegionGate.GateRequirement(i.ToString(), true);
+            //new RegionGate.GateRequirement(i.ToString(), true);
         }
         catch (Exception ex)
         {
             Logger.LogError(ex);
             throw;
         }
+    }
+
+    private void IL_OverWorld_GateRequestsSwitchInitiation(ILContext il)
+    {
+        try
+        {
+            ILCursor c = new(il);
+
+            if (!c.TryGotoNext(MoveType.Before,
+                x => x.MatchLdarg(0),
+                x => x.MatchLdfld<RainWorldGame>(nameof(OverWorld.game)),
+                x => x.MatchCallvirt<bool>(typeof(RainWorldGame).GetProperty(nameof(RainWorldGame.IsStorySession)).GetGetMethod().Name),
+                x => true,
+                x => x.MatchLdnull(),
+                x => true,
+                x => x.MatchLdarg(0),
+                x => x.MatchLdfld<RainWorldGame>(nameof(OverWorld.game)),
+                x => x.MatchCallvirt<SlugcatStats.Name>(typeof(RainWorldGame).GetProperty(nameof(RainWorldGame.StoryCharacter)).GetGetMethod().Name),
+                x => x.MatchLdloc(3),
+                x => x.MatchCall<string>(nameof(Region.GetProperRegionAcronym)),
+                x => x.MatchStloc(3)))
+            {
+                Logger.LogDebug("Long IL hook failed; trying short one.");
+                if (!c.TryGotoNext(MoveType.Before,
+                    x => x.MatchLdloc(3),
+                    x => x.MatchCall<string>(nameof(Region.GetProperRegionAcronym)),
+                    x => x.MatchStloc(3)))
+                {
+                    Logger.LogDebug("Short IL hook failed too; returning");
+                    return;
+                }
+            }
+            Logger.LogDebug("IL hook succeeded?");
+
+            //inject new value
+            c.Emit(OpCodes.Ldarg_0);
+            c.EmitDelegate<Func<OverWorld, string>>((overWorld) => NewRegionToLoadName);
+            c.Emit(OpCodes.Stloc_3);
+
+        }
+        catch (Exception ex) { Logger.LogError(ex); }
     }
     #endregion
 
@@ -512,6 +571,7 @@ public partial class RegionRandomizer : BaseUnityPlugin
 
     #region hooks
 
+    public static string NewRegionToLoadName = "";
     private static void OverWorld_GateRequestsSwitchInitiation(On.OverWorld.orig_GateRequestsSwitchInitiation orig, OverWorld self, RegionGate reportBackToGate)
     {
         //modded
@@ -552,88 +612,54 @@ public partial class RegionRandomizer : BaseUnityPlugin
             foreach (string g in GateNames)
                 s += g + ", ";
             self.game.rainWorld.HandleLog("RegionRandomizer: Didn't find the gate in: " + s, "stuff", LogType.Log);
-            newName = room.name;
-            realNewName = room.name;
             orig(self, reportBackToGate);
             return;
         }
-        else
-        {
-            string s2 = "";
-            foreach (string g in NewGates1)
-            {
-                s2 += g + ", ";
-            }
-            self.game.rainWorld.HandleLog("RegionRandomizer: NewGates1: " + s2, "stuff", LogType.Log);
-            s2 = "";
-            foreach (string g in NewGates2)
-            {
-                s2 += g + ", ";
-            }
-            self.game.rainWorld.HandleLog("RegionRandomizer: NewGates2: " + s2, "stuff", LogType.Log);
 
-            if (room.name.Split('_')[1] == Region.GetVanillaEquivalentRegionAcronym(self.game.world.region.name))
+        //find gate name
+        string s2 = "";
+        foreach (string g in NewGates1)
+        {
+            s2 += g + ", ";
+        }
+        self.game.rainWorld.HandleLog("RegionRandomizer: NewGates1: " + s2, "stuff", LogType.Log);
+        s2 = "";
+        foreach (string g in NewGates2)
+        {
+            s2 += g + ", ";
+        }
+        self.game.rainWorld.HandleLog("RegionRandomizer: NewGates2: " + s2, "stuff", LogType.Log);
+
+        if (room.name.Split('_')[1] == Region.GetVanillaEquivalentRegionAcronym(self.game.world.region.name))
+        {
+            newName = NewGates1[idx];
+            self.game.rainWorld.HandleLog("RegionRandomizer: newName: " + newName, "stuff", LogType.Log);
+            int idx2 = -1;
+            for (int i = 0; i < NewGates2.Length; i++)
             {
-                newName = NewGates1[idx];
-                self.game.rainWorld.HandleLog("RegionRandomizer: newName: " + newName, "stuff", LogType.Log);
-                int idx2 = -1;
-                for (int i = 0; i < NewGates2.Length; i++)
+                try
                 {
-                    try
+                    if (newName.Trim().ToUpper() == NewGates2[i].Trim().ToUpper())
                     {
-                        if (newName.Trim().ToUpper() == NewGates2[i].Trim().ToUpper())
-                        {
-                            self.game.rainWorld.HandleLog("RegionRandomizer: idx2 = " + i, "stuff", LogType.Log);
-                            idx2 = i;
-                            break;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        self.game.rainWorld.HandleLog("RegionRandomizer: Unknown error with reading GateNames[i]. i = " + i, "stuff", LogType.Log);
+                        self.game.rainWorld.HandleLog("RegionRandomizer: idx2 = " + i, "stuff", LogType.Log);
+                        idx2 = i;
+                        break;
                     }
                 }
-                if (idx2 >= 0)
-                    realNewName = GateNames[idx2];
-                else
+                catch (Exception ex)
                 {
-                    //search NewGates1
-                    for (int i = 0; i < NewGates1.Length; i++)
-                    {
-                        if (i == idx)
-                            continue;
-                        try
-                        {
-                            if (newName.Trim().ToUpper() == NewGates1[i].Trim().ToUpper())
-                            {
-                                self.game.rainWorld.HandleLog("RegionRandomizer: idx2 = " + i, "stuff", LogType.Log);
-                                idx2 = i;
-                                break;
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            self.game.rainWorld.HandleLog("RegionRandomizer: Unknown error with reading GateNames[i]. i = " + i, "stuff", LogType.Log);
-                        }
-                    }
-                    if (idx2 >= 0)
-                        realNewName = GateNames[idx2];
-                    else
-                    {
-                        self.game.rainWorld.HandleLog("RegionRandomizer: idx2 not found", "stuff", LogType.Log);
-                        realNewName = room.name;
-                        orig(self, reportBackToGate);
-                        return;
-                    }
+                    self.game.rainWorld.HandleLog("RegionRandomizer: Unknown error with reading GateNames[i]. i = " + i, "stuff", LogType.Log);
                 }
             }
+            if (idx2 >= 0)
+                realNewName = GateNames[idx2];
             else
             {
-                newName = NewGates2[idx];
-                self.game.rainWorld.HandleLog("RegionRandomizer: newName: " + newName, "stuff", LogType.Log);
-                int idx2 = -1;
+                //search NewGates1
                 for (int i = 0; i < NewGates1.Length; i++)
                 {
+                    if (i == idx)
+                        continue;
                     try
                     {
                         if (newName.Trim().ToUpper() == NewGates1[i].Trim().ToUpper())
@@ -652,45 +678,80 @@ public partial class RegionRandomizer : BaseUnityPlugin
                     realNewName = GateNames[idx2];
                 else
                 {
-                    //search NewGates2
-                    for (int i = 0; i < NewGates2.Length; i++)
-                    {
-                        if (i == idx)
-                            continue;
-                        try
-                        {
-                            if (newName.Trim().ToUpper() == NewGates2[i].Trim().ToUpper())
-                            {
-                                self.game.rainWorld.HandleLog("RegionRandomizer: idx2 = " + i, "stuff", LogType.Log);
-                                idx2 = i;
-                                break;
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            self.game.rainWorld.HandleLog("RegionRandomizer: Unknown error with reading GateNames[i]. i = " + i, "stuff", LogType.Log);
-                        }
-                    }
-                    if (idx2 >= 0)
-                        realNewName = GateNames[idx2];
-                    else
-                    {
-                        self.game.rainWorld.HandleLog("RegionRandomizer: idx2 not found", "stuff", LogType.Log);
-                        realNewName = room.name;
-                        orig(self, reportBackToGate);
-                        return;
-                    }
+                    self.game.rainWorld.HandleLog("RegionRandomizer: idx2 not found", "stuff", LogType.Log);
+                    orig(self, reportBackToGate);
+                    return;
                 }
             }
-
-            self.game.rainWorld.HandleLog("RegionRandomizer: newName: " + newName + ", realNewName: " + realNewName, "stuff", LogType.Log);
-
-            reportBackToGate.room.abstractRoom.name = realNewName;
-            //GateBlockUnload = realNewName;
-
-            RealNewGateName = realNewName;
-
         }
+        else
+        {
+            newName = NewGates2[idx];
+            self.game.rainWorld.HandleLog("RegionRandomizer: newName: " + newName, "stuff", LogType.Log);
+            int idx2 = -1;
+            for (int i = 0; i < NewGates1.Length; i++)
+            {
+                try
+                {
+                    if (newName.Trim().ToUpper() == NewGates1[i].Trim().ToUpper())
+                    {
+                        self.game.rainWorld.HandleLog("RegionRandomizer: idx2 = " + i, "stuff", LogType.Log);
+                        idx2 = i;
+                        break;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    self.game.rainWorld.HandleLog("RegionRandomizer: Unknown error with reading GateNames[i]. i = " + i, "stuff", LogType.Log);
+                }
+            }
+            if (idx2 >= 0)
+                realNewName = GateNames[idx2];
+            else
+            {
+                //search NewGates2
+                for (int i = 0; i < NewGates2.Length; i++)
+                {
+                    if (i == idx)
+                        continue;
+                    try
+                    {
+                        if (newName.Trim().ToUpper() == NewGates2[i].Trim().ToUpper())
+                        {
+                            self.game.rainWorld.HandleLog("RegionRandomizer: idx2 = " + i, "stuff", LogType.Log);
+                            idx2 = i;
+                            break;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        self.game.rainWorld.HandleLog("RegionRandomizer: Unknown error with reading GateNames[i]. i = " + i, "stuff", LogType.Log);
+                    }
+                }
+                if (idx2 >= 0)
+                    realNewName = GateNames[idx2];
+                else
+                {
+                    self.game.rainWorld.HandleLog("RegionRandomizer: idx2 not found", "stuff", LogType.Log);
+                    orig(self, reportBackToGate);
+                    return;
+                }
+            }
+        }
+
+        self.game.rainWorld.HandleLog("RegionRandomizer: newName: " + newName + ", realNewName: " + realNewName, "stuff", LogType.Log);
+
+        //reportBackToGate.room.abstractRoom.name = realNewName;
+        //GateBlockUnload = realNewName;
+
+        string[] reName = newName.Split('_');
+        reName[1] = Region.GetVanillaEquivalentRegionAcronym(reName[1]);
+        reName[2] = Region.GetVanillaEquivalentRegionAcronym(reName[2]);
+
+        reportBackToGate.room.abstractRoom.name = String.Join("_", reName);
+
+        RealNewGateName = realNewName;
+
 
         //subtract karma from player
         try
@@ -716,9 +777,34 @@ public partial class RegionRandomizer : BaseUnityPlugin
             self.game.rainWorld.HandleLog("RegionRandomizer: Karma Subtraction Error: " + ex.Message, ex.StackTrace, LogType.Error);
         }
 
+        /*
+        //determine which region to load
+        string currentRegion = self.activeWorld.name;
+        currentRegion = Region.GetVanillaEquivalentRegionAcronym(currentRegion);
+
+        //modded
+        string[] gateData = Regex.Split(newName, "_");
+
+        //mods finish here
+        NewRegionToLoadName = "";
+        if (gateData.Length == 3)
+        {
+            for (int i = 1; i < 3; i++)
+            {
+                if (Region.GetVanillaEquivalentRegionAcronym(gateData[i]) != currentRegion) //ADDED Region.GetVanillaEquivalentRegionAcronym !!!
+                {
+                    NewRegionToLoadName = gateData[i];
+                    break;
+                }
+            }
+        }
+        NewRegionToLoadName = Region.GetProperRegionAcronym(self.game.IsStorySession ? self.game.StoryCharacter : null, NewRegionToLoadName);
+        */
+        //call orig
+        orig(self, reportBackToGate);
 
         //original code
-
+        /*
         self.reportBackToGate = reportBackToGate;
         AbstractRoom abstractRoom = reportBackToGate.room.abstractRoom;
         Custom.Log(new string[] { "Switch Worlds" });
@@ -808,7 +894,16 @@ public partial class RegionRandomizer : BaseUnityPlugin
         
         self.worldLoader = new WorldLoader(self.game, self.PlayerCharacterNumber, false, text2, self.GetRegion(text2), self.game.setupValues);
         self.worldLoader.NextActivity();
-
+        */
+    }
+    private void WorldLoader_ctor(On.WorldLoader.orig_ctor_RainWorldGame_Name_bool_string_Region_SetupValues orig, WorldLoader self, RainWorldGame game, SlugcatStats.Name playerCharacter, bool singleRoomWorld, string worldName, Region region, RainWorldGame.SetupValues setupValues)
+    {
+        if (RealNewGateName != "" && game.overWorld != null && game.overWorld.reportBackToGate != null)
+        {
+            game.overWorld.reportBackToGate.room.abstractRoom.name = RealNewGateName;
+            RealNewGateName = "";
+        }
+        orig(self, game, playerCharacter, singleRoomWorld, worldName, region, setupValues);
     }
 
     private static string OriginalGateName = "";
@@ -1118,14 +1213,14 @@ public partial class RegionRandomizer : BaseUnityPlugin
                 }
                 if (creatureInRoom)
                 {
-                    try { await Task.Delay(100); }
+                    try { await Task.Delay(10); }
                     catch (Exception ex) { self.game.rainWorld.HandleLog("RegionRandomizer: Thread Sleep Error: " + ex.Message, ex.StackTrace, LogType.Error); }
                     continue;
                 }
                 try
                 {
                     self.game.rainWorld.HandleLog("RegionRandomizer: No players in room: " + origName, "stuff", LogType.Log);
-                    await Task.Delay(50); //add an additional wait just to make sure everything has finished loading
+                    await Task.Delay(10); //add an additional wait just to make sure everything has finished loading
 
                     ar.name = newName; //try renaming first...?
                     ar.Abstractize();
@@ -1288,6 +1383,7 @@ public partial class RegionRandomizer : BaseUnityPlugin
         addKarmaNextDeath = 0;
 
         LogSomething("InitGame");
+        LogSomething("IsOnline: " + IsOnline() + ", IsHost: " + IsHost() + ", meadowEnabled: " + meadowEnabled);
         if (IsOnline() && !IsHost())
         {
             LogSomething("Skipping randomization");
@@ -1330,11 +1426,8 @@ public partial class RegionRandomizer : BaseUnityPlugin
 
         //MergeLocksFile(locksFile);
 
-        if (IsOnline() && IsHost())
-        {
-            LogSomething("Adding online data");
-            AddOnlineData();
-        }
+        //LogSomething("Adding online data");
+        //AddOnlineData();
     }
 
     private void RainWorldGameOnShutDownProcess(On.RainWorldGame.orig_ShutDownProcess orig, RainWorldGame self)
@@ -3012,11 +3105,8 @@ public partial class RegionRandomizer : BaseUnityPlugin
 
 
                 //sync randomizer info online
-                if (IsOnline() && IsHost())
-                {
-                    LogSomething("Adding online data from randomizer");
-                    AddOnlineData();
-                }
+                //LogSomething("Adding online data from randomizer");
+                //AddOnlineData();
 
             } catch (Exception ex)
             {
@@ -3246,6 +3336,6 @@ public partial class RegionRandomizer : BaseUnityPlugin
 
     public static void LogSomething(object obj)
     {
-        Instance.Logger.LogDebug(obj);
+        Instance.Logger.LogInfo(obj);
     }
 }
