@@ -1,4 +1,3 @@
-using BepInEx.Logging;
 using MonoMod.RuntimeDetour;
 using RainMeadow;
 using System;
@@ -11,7 +10,7 @@ namespace RegionRandomizer;
  * Original file by Choc
  * Significantly modified to support soft-compatibility
  */
-internal partial class RainMeadowCompat
+internal class RainMeadowCompat
 {
     //public static bool meadowEnabled = false;
     public static bool IsOnline => OnlineManager.lobby != null;
@@ -47,9 +46,10 @@ internal partial class RainMeadowCompat
     {
         orig(self);
 
-		if (onlineDataAdded) return;
+		//if (onlineDataAdded) return;
 
-        //onlineData ??= new RandomizerData();
+		//onlineData ??= new RandomizerData();
+		if (!IsHost) return;
 
         self.AddData(new RandomizerData());
 
@@ -58,22 +58,55 @@ internal partial class RainMeadowCompat
 		onlineDataAdded = true;
     }
 
-    public static void AddOnlineData()
-    {
-        if (!IsOnline) return;
-		//onlineData ??= new RandomizerData();
-		//OnlineManager.lobby.AddData(onlineData as RandomizerData);
-		//OnlineManager.lobby.AddData(new RandomizerData());
-        RegionRandomizer.LogSomething("Added online data");
+	public static void SignalUpdateToData()
+	{
+		try
+		{
+			OnlineManager.lobby.GetData<RandomizerData>().UpdateData();
+		}
+		catch (Exception ex) { RegionRandomizer.LogSomething(ex); }
+	}
+
+	public static bool IsChanged(string[] newGates)
+	{
+		if (newGates.Length < 1) //bad info
+			return false;
+		if (newGates.Length != RegionRandomizer.NewGates1.Length) //different length
+			return true;
+        for (int i = 0; i < newGates.Length; i++)
+        {
+            if (newGates[i] != RegionRandomizer.NewGates1[i]) //difference within array
+				return true;
+        }
+		return false;
     }
 
     public class RandomizerData : OnlineResource.ResourceData
 	{
-		public RandomizerData() { }
+		public RandomizerData() {
+			currentState = new State(this);
+		}
 
+        string[] CustomGateLocksKeys = new string[0];
+        string[] CustomGateLocksValues = new string[0];
+        string[] GateNames = new string[0];
+        string[] NewGates1 = new string[0];
+        string[] NewGates2 = new string[0];
+        public void UpdateData()
+		{
+            CustomGateLocksKeys = RegionRandomizer.CustomGateLocks.Keys.ToArray();
+            CustomGateLocksValues = RegionRandomizer.CustomGateLocks.Values.ToArray();
+            GateNames = RegionRandomizer.GateNames;
+            NewGates1 = RegionRandomizer.NewGates1;
+            NewGates2 = RegionRandomizer.NewGates2;
+			currentState = new State(this);
+            RegionRandomizer.LogSomething("Updated data. Lengths: " + CustomGateLocksKeys.Length + ", " + NewGates1.Length);
+        }
+
+		private State currentState;
 		public override ResourceDataState MakeState(OnlineResource resource)
 		{
-			return new State(this);
+			return currentState;
 		}
 
 		private class State : ResourceDataState
@@ -83,31 +116,33 @@ internal partial class RainMeadowCompat
 			//[OnlineField(nullable = true)]
 			//Dictionary<string, string> CustomGateLocks;
 			[OnlineField]
-			string[] CustomGateLocksKeys = new string[0];
+			string[] CustomGateLocksKeys;
 			[OnlineField]
-			string[] CustomGateLocksValues = new string[0];
+			string[] CustomGateLocksValues;
 			[OnlineField]
-			string[] GateNames = new string[0];
+			string[] GateNames;
 			[OnlineField]
-			string[] NewGates1 = new string[0];
+			string[] NewGates1;
 			[OnlineField]
-			string[] NewGates2 = new string[0];
-
+			string[] NewGates2;
+			
 			public State() { }
-			public State(RandomizerData data)
-			{
-				CustomGateLocksKeys = RegionRandomizer.CustomGateLocks.Keys.ToArray();
-				CustomGateLocksValues = RegionRandomizer.CustomGateLocks.Values.ToArray();
-				GateNames = RegionRandomizer.GateNames;
-				NewGates1 = RegionRandomizer.NewGates1;
-				NewGates2 = RegionRandomizer.NewGates2;
-				RegionRandomizer.LogSomething("Added state. Lengths: " + CustomGateLocksKeys.Length + ", " + NewGates1.Length);
+			public State(RandomizerData data) {
+				CustomGateLocksKeys = data.CustomGateLocksKeys;
+                CustomGateLocksValues = data.CustomGateLocksValues;
+                GateNames = data.GateNames;
+                NewGates1 = data.NewGates1;
+                NewGates2 = data.NewGates2;
+                RegionRandomizer.LogSomething("Added state.");
 			}
 
 			public override void ReadTo(OnlineResource.ResourceData data, OnlineResource resource)
 			{
 				try
 				{
+					//determine if new data to be read
+					if (!IsChanged(NewGates1)) return;
+
 					RegionRandomizer.CustomGateLocks = CustomGateLocksKeys.Zip(CustomGateLocksValues, (k, v) => (k, v)).ToDictionary(x => x.k, x => x.v);
 					RegionRandomizer.GateNames = GateNames;
 					RegionRandomizer.NewGates1 = NewGates1;

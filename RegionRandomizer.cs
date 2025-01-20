@@ -29,7 +29,7 @@ public partial class RegionRandomizer : BaseUnityPlugin
 {
     public const string MOD_ID = "LazyCowboy.RegionRandomizer";
     public const string MOD_NAME = "Region Randomizer";
-    public const string MOD_VERSION = "1.2.4";
+    public const string MOD_VERSION = "1.2.6";
 
     /*
      * TODO Notes:
@@ -61,9 +61,10 @@ public partial class RegionRandomizer : BaseUnityPlugin
         }
         catch (Exception ex) { LogSomething(ex); return false; }
     }
-    public static void AddOnlineData()
+    public static void SignalUpdateToData()
     {
-        try { RainMeadowCompat.AddOnlineData(); }
+        if (!meadowEnabled) return;
+        try { RainMeadowCompat.SignalUpdateToData(); }
         catch (Exception ex) { LogSomething(ex); }
     }
     #endregion
@@ -90,7 +91,7 @@ public partial class RegionRandomizer : BaseUnityPlugin
     private void OnEnable()
     {
         Logger.LogDebug("Mod enabled");
-        Logger.LogDebug("CustomGateLocksLength: " + CustomGateLocks.Count + ", onlineDataAdded: " + RainMeadowCompat.onlineDataAdded);
+        //Logger.LogDebug("CustomGateLocksLength: " + CustomGateLocks.Count + ", onlineDataAdded: " + RainMeadowCompat.onlineDataAdded);
 
         On.RainWorld.OnModsInit += RainWorldOnOnModsInit;
         //RegionLoader.Enable();
@@ -1190,7 +1191,14 @@ public partial class RegionRandomizer : BaseUnityPlugin
             //Thread.Sleep(5000);
             while (true)
             {
-                bool creatureInRoom = false;
+                AbstractRoom ar = self.activeWorld.GetAbstractRoom(origName);
+                if (ar == null || ar.realizedRoom == null)
+                {
+                    LogSomething("Room already abstracted: " + origName);
+                    break;
+                }
+                bool creatureInRoom = ar.realizedRoom.PlayersInRoom.Count > 0;
+                /*
                 foreach (AbstractCreature p in oldCreatures.Concat(self.game.AlivePlayers))
                 {
                     if (p.Room.name == origName)
@@ -1211,6 +1219,7 @@ public partial class RegionRandomizer : BaseUnityPlugin
                         self.game.rainWorld.HandleLog("RegionRandomizer: Room still contains creatures", "stuff", LogType.Log);
                     }
                 }
+                */
                 if (creatureInRoom)
                 {
                     try { await Task.Delay(10); }
@@ -1428,6 +1437,7 @@ public partial class RegionRandomizer : BaseUnityPlugin
 
         //LogSomething("Adding online data");
         //AddOnlineData();
+        SignalUpdateToData();
     }
 
     private void RainWorldGameOnShutDownProcess(On.RainWorldGame.orig_ShutDownProcess orig, RainWorldGame self)
@@ -2867,8 +2877,16 @@ public partial class RegionRandomizer : BaseUnityPlugin
 
     private List<string> BlacklistedRegions;
 
+    private bool currentlyRandomizing = false;
     public void RandomizeAllRegions()
     {
+        if (currentlyRandomizing)
+        {
+            Logger.LogDebug("Already currently randomizing!");
+            return;
+        }
+
+        currentlyRandomizing = true;
         Task.Run(() =>
         {
             try
@@ -3103,15 +3121,18 @@ public partial class RegionRandomizer : BaseUnityPlugin
                 connections.Clear();
                 altOldGates.Clear();
 
-
                 //sync randomizer info online
                 //LogSomething("Adding online data from randomizer");
                 //AddOnlineData();
+                SignalUpdateToData();
 
             } catch (Exception ex)
             {
                 Logger.LogError(ex);
             }
+
+            currentlyRandomizing = false;
+
         });
     }
     private static void AddToDictionaryList(Dictionary<string, List<string>> d, string k, string v)
