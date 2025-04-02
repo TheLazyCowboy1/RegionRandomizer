@@ -29,7 +29,7 @@ public partial class RegionRandomizer : BaseUnityPlugin
 {
     public const string MOD_ID = "LazyCowboy.RegionRandomizer";
     public const string MOD_NAME = "Region Randomizer";
-    public const string MOD_VERSION = "1.2.6";
+    public const string MOD_VERSION = "1.2.7";
 
     /*
      * TODO Notes:
@@ -910,12 +910,12 @@ public partial class RegionRandomizer : BaseUnityPlugin
     private static string OriginalGateName = "";
     private static string RealNewGateName = "";
 
-    public static void OverWorld_WorldLoaded(On.OverWorld.orig_WorldLoaded orig, OverWorld self)
+    public static void OverWorld_WorldLoaded(On.OverWorld.orig_WorldLoaded orig, OverWorld self, bool warpUsed)
     {
         if (RealNewGateName == "")
         {
             OriginalGateName = "";
-            orig(self);
+            orig(self, warpUsed);
             return;
         }
 
@@ -928,7 +928,7 @@ public partial class RegionRandomizer : BaseUnityPlugin
 
         try
         {
-            orig(self);
+            orig(self, warpUsed);
         }
         catch (Exception ex)
         {
